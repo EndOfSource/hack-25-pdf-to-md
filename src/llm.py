@@ -7,7 +7,7 @@ from pathlib import Path
 def output_directory(filename):
     # Create a directory based on the filename without extension
     base_filename = os.path.splitext(os.path.basename(filename))[0]
-    out_dir = f"pdfs/{base_filename}"
+    out_dir = f"md/{base_filename}"
     os.makedirs(out_dir, exist_ok=True)
     return out_dir
 
@@ -62,6 +62,6 @@ def pdf_to_markdown(filename):
             f.write(f"**{heading}**\n\n{content}\n")
 
 
-source_dir = os.path.expanduser("~/code/hack25-data")
+source_dir = os.path.expanduser("pdfs/")
 for pdf_file in Path(source_dir).glob("*.pdf"):
     pdf_to_markdown(pdf_file)
