@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  neo4j:
+    image: neo4j:2025.05.0
+    container_name: neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/hack25gg
+    volumes:
+      - neo4j_data:/data
+
+volumes:
+  neo4j_data:
