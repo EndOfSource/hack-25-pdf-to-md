@@ -1,0 +1,41 @@
+# config.yaml: Neo4j Credentials
+credentials:
+  uri: "bolt://localhost:7687"
+  user: neo4j
+  password: "hack25gg"
+
+cypher:
+  load_nodes:
+    # loading in the series nodes
+    load_series: |
+      WITH $rows AS rows
+      UNWIND rows AS row
+      MERGE (s:Series {seriesName:row.series_name})
+
+    # loading in episode nodes and connecting them to existing series nodes
+    load_episodes: |
+      WITH $rows AS rows
+      UNWIND rows AS row
+      MATCH (s:Series {seriesName:row.series_name})
+      MERGE (e:Episode {episodeTitle:row.title})
+      SET e.season = row.season, e.network = row.network,
+      e.imdb = row.imdb, e.engagement = row.engagement,
+      e.runtime = row.runtime, e.format = row.format
+      MERGE (s) <-[:IN_SERIES]- (e)
+
+    # Loading in monsters, subtypes, types, species, and the relationships between them
+    load_monsters: |
+      WITH $rows AS rows
+      UNWIND rows AS row
+      MERGE (m:Monster {name:row.monster_name})
+      SET m.real = row.monster_real, m.gender = row.monster_gender
+      WITH m,row
+      MERGE (st:Subtype {name:row.monster_subtype})
+      MERGE (t:Type {name:row.monster_type})
+      MERGE (s:Species {name:row.monster_species})
+      WITH m,st,t,s,row
+      MATCH (e:Episode {episodeTitle:row.title})
+      MERGE (m) -[:APPEARS_IN] -> (e)
+      MERGE (m) -[:IS_SUBTYPE]->(st)
+      MERGE (st)-[:IS_TYPE]->(t)
+      MERGE (t)-[:IS_SPECIES]->(s)

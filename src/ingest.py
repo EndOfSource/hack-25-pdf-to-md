@@ -32,9 +32,9 @@ def import_knowledge_graph(json_path, neo4j_uri, user, password):
         for node in enumerate(nodes):
             node_name = node.get("name", node["id"])
             result = session.run(
-                "CREATE (n:Node {name: $name, idx: $idx, type: $type}) RETURN id(n)",
+                "CREATE (n:Node {name: $name, elementId: $elementId, type: $type}) RETURN id(n)",
                 name=node_name,
-                idx=node["id"],
+                elementId=node["id"],
                 type=node.get("type"),
             )
             node_id = result.single()[0]

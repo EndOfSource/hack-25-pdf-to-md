@@ -2,3 +2,4 @@ pymupdf4llm
 pandas
 pyneoinstance
 flask
+requests
