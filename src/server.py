@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request
 import os
-from llm import pdf_to_markdown
+from pdf_to_markdown import pdf_to_markdown
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 
