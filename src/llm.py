@@ -27,7 +27,9 @@ def is_outletter(filename):
     return "_OUTLETTER_" in filename.name.upper()
 
 
-def pdf_to_markdown(filename):
+def pdf_to_markdown(filename: Path):
+    if isinstance(filename, str):
+        filename = Path(filename)
     md_text = pymupdf4llm.to_markdown(filename)
     # Write the full markdown text to a single file
     out_dir = output_directory(filename)
@@ -62,6 +64,7 @@ def pdf_to_markdown(filename):
             f.write(f"**{heading}**\n\n{content}\n")
 
 
-source_dir = os.path.expanduser("pdfs/")
-for pdf_file in Path(source_dir).glob("*.pdf"):
-    pdf_to_markdown(pdf_file)
+if __name__ == "__main__":
+    source_dir = os.path.expanduser("pdfs/")
+    for pdf_file in Path(source_dir).glob("*.pdf"):
+        pdf_to_markdown(pdf_file)

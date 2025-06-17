@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>File Upload</title>
+
+    <head>
+        <link href="https://unpkg.com/tailwindcss@^1.0/dist/tailwind.min.css" rel="stylesheet">
+    </head>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 text-center">Upload a file</h2>
+        <form action="/upload" enctype="multipart/form-data" method="post" class="flex flex-col gap-4">
+            <input name="file" type="file"
+                class="block w-full text-sm text-gray-700 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input type="submit" value="Upload"
+                class="bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer" />
+        </form>
+        <h3 class="text-lg font-semibold mt-8 mb-2 text-gray-700">Output:</h3>
+        <textarea rows="4" cols="50"
+            class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 resize-none"
+            readonly>{{ output }}</textarea>
+    </div>
+</body>
+
+</html>
