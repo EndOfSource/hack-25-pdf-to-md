@@ -130,13 +130,7 @@ def serveAsk():
     return render_template("ask.html", documents=get_documents())
 
 
-@app.route("/ask", methods=["POST"])
-def ask():
-    doc_id = request.form.get("doc_id", "")
-    question = request.form.get("question", "")
-    print(f"Processing document ID: {doc_id}, question: {question}")
-    if not doc_id:
-        return render_template("index.html", output="Error: No document ID provided")
+def ask_question(doc_id, question):
     doc_type = "Document"
     cypher = (
         f"MATCH (n:Node {{elementId: '{doc_id}', type: '{doc_type}'}})-[r*1..3]-(m) "
@@ -152,6 +146,18 @@ def ask():
     prompt = f"{question}\n\nSearch the Neo4j database for relevant information to support your assessment."
     print(f"prompt: {prompt}    ")
     output = ask_ollama(prompt, context)
+    return output
+
+
+@app.route("/ask", methods=["POST"])
+def ask():
+    doc_id = request.form.get("doc_id", "")
+    question = request.form.get("question", "")
+    print(f"Processing document ID: {doc_id}, question: {question}")
+    if not doc_id:
+        return render_template("index.html", output="Error: No document ID provided")
+
+    output = ask_question(doc_id, question)
 
     return render_template(
         "ask.html",
@@ -181,6 +187,25 @@ def dashboardGetId(id):
         doc_id=id,
         document=documentForId,
         stats=getStatsForDocument(id),
+    )
+
+
+@app.route("/dashboard/<id>", methods=["POST"])
+def dashboardPostId(id):
+    print(f"Dashboard request for document ID: {id}")
+    documentForId = [doc for doc in get_documents() if doc["id"] == id][0]
+    print(f"Found document for ID {id}: {documentForId}")
+
+    question = request.form.get("question", "")
+
+    output = ask_question(id, question)
+
+    return render_template(
+        "dashboard_doc_id.html",
+        doc_id=id,
+        document=documentForId,
+        stats=getStatsForDocument(id),
+        output=output,
     )
 
 

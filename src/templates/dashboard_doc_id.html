@@ -581,6 +581,29 @@
                 </div>
             </div>
             {% endif %}
+
+            <!-- Ask a Question Section -->
+            <div class="card" style="margin-top: 30px;">
+                <div class="section-title" style="margin-bottom: 18px;">💬 Ask a Question About This Document</div>
+                <form action="/dashboard/{{ doc_id }}" method="post" enctype="multipart/form-data"
+                    style="display: flex; flex-direction: column; gap: 18px;">
+                    <input type="hidden" name="doc_id" value="{{ doc_id }}">
+                    <textarea name="question" rows="4" placeholder="Type your question here..." required
+                        style="padding: 14px; border: 2px solid #e9ecef; border-radius: 10px; font-size: 1rem; background: #f8f9fa; resize: vertical;"></textarea>
+                    <button type="submit"
+                        style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-weight: 600; padding: 12px 0; border: none; border-radius: 10px; font-size: 1.1rem; cursor: pointer; transition: background 0.3s;">
+                        Ask
+                    </button>
+                </form>
+                {% if output %}
+                <div style="margin-top: 22px;">
+                    <div class="section-title" style="font-size: 1rem; margin-bottom: 8px;">Answer:</div>
+                    <div
+                        style="background: #f8f9fa; border-radius: 10px; padding: 16px; border: 1.5px solid #e9ecef; color: #495057; font-size: 1rem; white-space: pre-wrap;">
+                        {{ output }}</div>
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
     <div class="tooltip" id="tooltip"></div>
