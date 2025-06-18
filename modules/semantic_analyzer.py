@@ -1,12 +1,12 @@
 """
-Semantic Analysis Module for PEAT Evidence Assessment
+Enhanced Semantic Analysis Module for PEAT Evidence Assessment
 This module provides semantic processing capabilities for MOD project documents
 to automatically identify and assess evidence against PEAT requirements.
 """
 
 import logging
-from typing import List, Dict, Tuple, Optional, Any
-from dataclasses import dataclass
+from typing import List, Dict, Tuple, Optional, Any, Set
+from dataclasses import dataclass, field
 from datetime import datetime
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -14,7 +14,10 @@ from transformers import pipeline, AutoTokenizer
 import torch
 import spacy
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.cluster import KMeans
 import json
+import re
+from pathlib import Path
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,12 +39,18 @@ class Evidence:
     """Represents a piece of evidence extracted from documents."""
     content: str
     document_id: str
+    chunk_type: Optional[str]  # New field for chunk type
     page_number: Optional[int]
     entities: List[Entity]
     embedding: Optional[np.ndarray]
     peat_categories: List[str]
     confidence_score: float
     metadata: Dict[str, Any]
+    id: str = field(default="", init=False)
+    
+    def __post_init__(self):
+        """Generate unique ID for evidence."""
+        self.id = f"{self.document_id}_{hash(self.content)}_{self.chunk_type or 'full'}"
 
 
 @dataclass
@@ -53,214 +62,139 @@ class SemanticChunk:
     embedding: Optional[np.ndarray]
     topic: Optional[str]
     entities: List[Entity]
+    chunk_type: Optional[str] = None  # New field
 
 
 class SemanticProcessor:
     """
-    Main class for semantic processing of MOD project documents.
-    Handles embeddings, entity extraction, and PEAT category mapping.
+    Enhanced semantic processor with support for chunk-based processing.
     """
     
     def __init__(self, config: Optional[Dict[str, Any]] = None,
                  categories_file: Optional[str] = None,
                  weights_file: Optional[str] = None):
-        """
-        Initialize the semantic processor with required models.
-        
-        Args:
-            config: Configuration dictionary for model parameters
-            categories_file: Path to PEAT categories JSON file
-            weights_file: Path to category keyword weights JSON file
-        """
+        """Initialize the semantic processor with required models."""
         self.config = config or self._get_default_config()
         
-        # Store file paths for configuration
-        self.categories_file = categories_file or 'peat_categories.json'
-        self.weights_file = weights_file or 'peat_weights.json'
-        
         # Initialize models
-        logger.info("Initializing semantic models...")
-        self._initialize_models()
+        logger.info("Loading semantic models...")
+        self.embedder = SentenceTransformer(self.config['embedding_model'])
+        self.nlp = spacy.load(self.config['spacy_model'])
         
-        # Load PEAT categories and weights
-        self.peat_categories = self._load_peat_categories()
-        self.category_weights = self._load_category_weights()
+        # Initialize NER pipeline
+        self.ner_pipeline = pipeline(
+            "ner",
+            model=self.config['ner_model'],
+            aggregation_strategy="simple"
+        )
         
-        # Initialize entity types relevant to MOD projects
+        # Initialize zero-shot classifier
+        self.classifier = pipeline(
+            "zero-shot-classification",
+            model=self.config['classification_model']
+        )
+        
+        # Load PEAT categories
+        self.peat_categories = self._load_peat_categories(categories_file)
+        
+        # Entity types relevant to MOD projects
         self.relevant_entity_types = {
-            'ORG': 'Organization',
-            'DATE': 'Date',
-            'PERSON': 'Person',
-            'GPE': 'Geo-political entity',
-            'MONEY': 'Monetary value',
-            'PERCENT': 'Percentage',
-            'ORDINAL': 'Ordinal number',
-            'CARDINAL': 'Cardinal number',
-            'FAC': 'Facility',
-            'PRODUCT': 'Product',
-            'EVENT': 'Event',
-            'LAW': 'Law or regulation'
+            'ORG', 'PERSON', 'DATE', 'MONEY', 'PERCENT', 'LOC', 'PRODUCT'
         }
         
+        # Chunk type mappings
+        self.chunk_type_to_category = {
+            'risk_management': ['risk_management', 'safety_security'],
+            'governance': ['governance', 'stakeholder_management'],
+            'schedule': ['schedule_management', 'technical_management'],
+            'cost_management': ['financial_management', 'cost_control'],
+            'commercial_management': ['commercial_management', 'procurement'],
+            'approvals_envelope': ['governance', 'stakeholder_management'],
+            'execution_strategy': ['technical_management', 'logistics_support']
+        }
+        
+        logger.info("Semantic processor initialized successfully")
+    
     def _get_default_config(self) -> Dict[str, Any]:
-        """Return default configuration for the processor."""
+        """Get default configuration with lowered thresholds."""
         return {
-            'embedding_model': 'sentence-transformers/all-mpnet-base-v2',
-            'ner_model': 'dslim/bert-base-NER',
-            'qa_model': 'deepset/roberta-base-squad2',
-            'classifier_model': 'facebook/bart-large-mnli',
-            'similarity_model': 'microsoft/deberta-v3-base',
-            'chunk_size': 512,
+            'embedding_model': 'all-MiniLM-L6-v2',
+            'spacy_model': 'en_core_web_sm',
+            'ner_model': 'dbmdz/bert-large-cased-finetuned-conll03-english',
+            'classification_model': 'facebook/bart-large-mnli',
+            'chunk_size': 256,
             'chunk_overlap': 50,
-            'min_confidence_threshold': 0.6,
-            'entity_confidence_threshold': 0.8
+            
+            # LOWERED THRESHOLDS for more comprehensive output
+            'min_confidence_threshold': 0.2,  # Was 0.4, now much lower
+            'entity_confidence_threshold': 0.3,  # Was 0.6, now lower
+            'similarity_threshold': 0.5,  # Was 0.7, now lower
+            'peat_relevance_threshold': 0.3,  # New: lower PEAT connection threshold
+            'evidence_inclusion_threshold': 0.2,  # New: very low barrier for evidence inclusion
         }
     
-    def _initialize_models(self):
-        """Initialize all required NLP models."""
-        try:
-            # Sentence embeddings model
-            self.embedder = SentenceTransformer(self.config['embedding_model'])
-            
-            # Named Entity Recognition
-            self.ner_pipeline = pipeline(
-                "ner", 
-                model=self.config['ner_model'],
-                aggregation_strategy="simple"
-            )
-            
-            # Question Answering
-            self.qa_pipeline = pipeline(
-                "question-answering",
-                model=self.config['qa_model']
-            )
-            
-            # Zero-shot classification
-            self.classifier = pipeline(
-                "zero-shot-classification",
-                model=self.config['classifier_model']
-            )
-            
-            # SpaCy for additional NLP tasks
-            self.nlp = spacy.load("en_core_web_sm")
-            
-            logger.info("All models initialized successfully")
-            
-        except Exception as e:
-            logger.error(f"Error initializing models: {str(e)}")
-            raise
-    
-    def _load_peat_categories(self) -> Dict[str, List[str]]:
-        """Load PEAT categories from configuration file or use defaults."""
-        try:
-            with open(self.categories_file, 'r') as f:
-                categories = json.load(f)
-                logger.info(f"Loaded PEAT categories from {self.categories_file}")
-                return categories
-        except FileNotFoundError:
-            logger.warning(f"Categories file {self.categories_file} not found, using defaults")
-            return self._get_default_categories()
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing categories file: {e}")
-            return self._get_default_categories()
-    
-    def _load_category_weights(self) -> Dict[str, Dict[str, float]]:
-        """Load category keyword weights from configuration file."""
-        try:
-            with open(self.weights_file, 'r') as f:
-                weights = json.load(f)
-                logger.info(f"Loaded category weights from {self.weights_file}")
-                return weights
-        except FileNotFoundError:
-            logger.warning(f"Weights file {self.weights_file} not found, using default weight 1.0")
-            return {}
-        except json.JSONDecodeError as e:
-            logger.error(f"Error parsing weights file: {e}")
-            return {}
-    
-    def _get_default_categories(self) -> Dict[str, List[str]]:
-        """Return default PEAT categories if config file not found."""
+    def _load_peat_categories(self, categories_file: Optional[str]) -> Dict[str, List[str]]:
+        """Load PEAT categories and keywords."""
+        if categories_file and Path(categories_file).exists():
+            with open(categories_file, 'r') as f:
+                return json.load(f)
+        
+        # Default PEAT categories with keywords
         return {
             'governance': [
-                'project board', 'steering committee', 'governance structure',
-                'decision making', 'accountability', 'RACI matrix', 'terms of reference',
-                'investment approval committee', 'IAC', 'project control', 'PC',
-                'senior responsible owner', 'SRO', 'project director', 'PD',
-                'project manager', 'PM', 'PSEC', 'project safety environmental committee',
-                'CIAWG', 'capability integration acceptance working group',
-                'authority', 'delegation', 'oversight', 'assurance', 'scrutiny',
-                'approval gates', 'review board', 'programme board', 'portfolio board',
-                'escalation', 'reporting structure', 'command structure', 'TOR'
-            ],
-            'requirements': [
-                'KUR', 'key user requirements', 'functional requirements',
-                'non-functional requirements', 'specifications', 'acceptance criteria',
-                'user requirements document', 'URD', 'system requirements', 'SRD',
-                'KPP', 'key performance parameters', 'measures of effectiveness',
-                'threshold', 'objective', 'requirement justification', 'requirement ID',
-                'operational requirements', 'technical requirements', 'interface requirements',
-                'performance requirements', 'JROC', 'joint requirements oversight committee',
-                'requirement validation', 'requirement verification', 'requirement traceability'
+                'governance', 'steering committee', 'board', 'authority', 'decision making',
+                'accountability', 'oversight', 'approval', 'delegation', 'terms of reference',
+                'project mandate', 'sponsorship', 'senior responsible owner', 'SRO',
+                'project board', 'project steering group', 'PSG', 'escalation'
             ],
             'risk_management': [
-                'risk register', 'risk assessment', 'mitigation', 'contingency',
-                'risk appetite', 'risk matrix', 'probability', 'impact',
-                'risk owner', 'risk category', 'technical risk', 'schedule risk',
-                'cost risk', 'operational risk', 'safety risk', 'environmental risk',
-                'HAZARD log', 'hazard analysis', 'safety case', 'SEMP',
-                'safety environmental management plan', 'risk reduction', 'risk acceptance',
-                'residual risk', 'risk treatment', 'risk monitoring', 'risk review'
+                'risk', 'risk management', 'risk register', 'risk assessment', 'risk mitigation',
+                'risk appetite', 'risk tolerance', 'issue', 'assumption', 'dependency',
+                'RAID', 'risk owner', 'risk review', 'risk reporting', 'risk escalation',
+                'monte carlo', 'sensitivity analysis', 'contingency', 'risk workshop'
             ],
-            'stakeholder_management': [
-                'stakeholder register', 'stakeholder analysis', 'engagement plan',
-                'communication plan', 'RACI', 'power interest grid', 'stakeholder matrix',
-                'front line command', 'FLC', 'user community', 'delivery partner',
-                'industry partner', 'supplier engagement', 'customer engagement',
-                'stakeholder communication', 'consultation', 'information requirements',
-                'stakeholder categories', 'influence', 'interest', 'engagement strategy',
-                'communication frequency', 'reporting requirements', 'stakeholder review'
+            'schedule_management': [
+                'schedule', 'milestone', 'timeline', 'gantt', 'critical path', 'float',
+                'baseline', 'earned value', 'SPI', 'schedule variance', 'dependency',
+                'predecessor', 'successor', 'work breakdown structure', 'WBS',
+                'integrated master schedule', 'IMS', 'schedule risk analysis', 'SRA'
+            ],
+            'financial_management': [
+                'cost', 'budget', 'financial', 'funding', 'expenditure', 'forecast',
+                'cash flow', 'cost baseline', 'cost variance', 'CPI', 'earned value',
+                'whole life cost', 'WLC', 'cost breakdown structure', 'CBS',
+                'cost estimation', 'financial authority', 'affordability'
             ],
             'benefits_management': [
-                'benefits realization', 'benefits register', 'benefits tracking',
-                'value proposition', 'outcomes', 'KPIs', 'success criteria',
-                'operational benefits', 'capability benefits', 'efficiency gains',
-                'cost avoidance', 'benefit owner', 'benefit profile', 'dis-benefits',
-                'benefit dependencies', 'benefit measurement', 'benefit baseline',
-                'FOC', 'full operating capability', 'IOC', 'initial operating capability',
-                'capability delivery', 'force elements at readiness', 'operational advantage'
+                'benefit', 'outcome', 'benefit realisation', 'benefit profile',
+                'benefit owner', 'benefit tracking', 'dis-benefit', 'value',
+                'benefit dependency network', 'benefit realisation plan',
+                'benefit measurement', 'KPI', 'success criteria'
             ],
-            'resources': [
-                'resource plan', 'staffing', 'budget', 'funding', 'allocation',
-                'capacity planning', 'skills matrix', 'SQEP', 'suitably qualified experienced personnel',
-                'manpower', 'FTE', 'full time equivalent', 'contractor resources',
-                'cost estimate', 'ABC', 'annual budget cycle', 'financial authority',
-                'cost cap', 'cost baseline', 'resource profile', 'team structure',
-                'organization chart', 'organogram', 'roles and responsibilities',
-                'commercial resources', 'technical resources', 'project support'
+            'stakeholder_management': [
+                'stakeholder', 'engagement', 'communication', 'consultation',
+                'stakeholder analysis', 'stakeholder map', 'RACI', 'communication plan',
+                'stakeholder register', 'influence', 'interest', 'user', 'customer'
             ],
-            'schedule': [
-                'project plan', 'timeline', 'milestones', 'critical path',
-                'Gantt chart', 'dependencies', 'deadlines', 'programme plan',
-                'integrated master schedule', 'IMS', 'key milestones', 'decision points',
-                'IGBC', 'initial gate business case', 'OBC', 'outline business case',
-                'FBC', 'full business case', 'assessment phase', 'demonstration phase',
-                'manufacture phase', 'in-service phase', 'disposal phase',
-                'PASE', 'planned acceptance service entry', 'schedule baseline',
-                'schedule risk', 'float', 'schedule compression', 'parallel activities'
+            'quality_management': [
+                'quality', 'quality assurance', 'quality control', 'quality plan',
+                'quality criteria', 'quality review', 'quality gate', 'acceptance criteria',
+                'verification', 'validation', 'V&V', 'test', 'inspection', 'audit'
             ],
-            'quality': [
-                'quality plan', 'quality assurance', 'quality control',
-                'standards', 'testing', 'validation', 'verification',
-                'PQMP', 'project quality management plan', 'quality metrics',
-                'quality reviews', 'technical reviews', 'design reviews',
-                'GEAR', 'guide engineering activities reviews', 'acceptance testing',
-                'qualification testing', 'certification', 'compliance', 'audit',
-                'defect management', 'quality gates', 'inspection', 'MOD standards',
-                'defence standards', 'JSP', 'joint service publication',
-                'configuration management', 'baseline control', 'change control'
+            'change_management': [
+                'change control', 'change request', 'change board', 'baseline change',
+                'configuration management', 'version control', 'change impact',
+                'change authority', 'change freeze', 'change log'
+            ],
+            'safety_security': [
+                'safety', 'security', 'safety case', 'ALARP', 'as low as reasonably practicable',
+                'hazard', 'hazard log', 'safety management plan', 'security classification',
+                'protective marking', 'security risk assessment', 'accreditation'
             ],
             'technical_management': [
-                'technical authority', 'design authority', 'system architecture',
+                'technical', 'design', 'architecture', 'interface', 'requirement',
+                'specification', 'system engineering management plan', 'SEMP',
+                'technical review', 'design review', 'CDR', 'PDR', 'TRR',
                 'technical baseline', 'interface management', 'integration plan',
                 'technical risk', 'technology readiness level', 'TRL', 'design maturity',
                 'COTS', 'commercial off the shelf', 'MOTS', 'military off the shelf',
@@ -268,7 +202,7 @@ class SemanticProcessor:
                 'engineering management plan', 'system design', 'subsystem design'
             ],
             'commercial_management': [
-                'procurement strategy', 'contract management', 'supplier management',
+                'procurement', 'contract', 'supplier', 'vendor', 'commercial',
                 'competitive procurement phase', 'CPP', 'ITN', 'invitation to negotiate',
                 'BAFO', 'best and final offer', 'MEAT', 'most economically advantageous tender',
                 'framework agreement', 'FATS', 'framework agreement technical support',
@@ -278,31 +212,24 @@ class SemanticProcessor:
             ],
             'logistics_support': [
                 'integrated logistics support', 'ILS', 'ILSP', 'integrated logistics support plan',
-                'support solution', 'maintenance concept', 'spares provisioning',
-                'training requirements', 'technical documentation', 'support equipment',
+                'support solution', 'maintenance', 'spares', 'provisioning',
+                'training', 'technical documentation', 'support equipment',
                 'DLOD', 'delegated lines of development', 'equipment DLOD', 'training DLOD',
                 'infrastructure DLOD', 'personnel DLOD', 'information DLOD', 'doctrine DLOD',
-                'organization DLOD', 'through life support', 'availability requirements'
+                'organization DLOD', 'through life support', 'availability'
             ]
-         }
+        }
     
-    def process_document(self, text: str, document_id: str, 
+    def process_document(self, text: str, document_id: str,
                         metadata: Optional[Dict[str, Any]] = None) -> List[Evidence]:
-        """
-        Process a complete document and extract evidence.
-        
-        Args:
-            text: Document text content
-            document_id: Unique identifier for the document
-            metadata: Additional document metadata
-            
-        Returns:
-            List of Evidence objects extracted from the document
-        """
+        """Process a complete document and extract evidence."""
         logger.info(f"Processing document: {document_id}")
         
+        # Extract chunk type from metadata if available
+        chunk_type = metadata.get('chunk_type') if metadata else None
+        
         # Create semantic chunks
-        chunks = self._create_semantic_chunks(text)
+        chunks = self._create_semantic_chunks(text, chunk_type)
         
         # Process each chunk
         evidence_list = []
@@ -313,8 +240,8 @@ class SemanticProcessor:
             # Extract entities
             chunk.entities = self._extract_entities(chunk.text)
             
-            # Identify topic/category
-            chunk.topic = self._classify_chunk(chunk.text)
+            # Identify topic/category with chunk type consideration
+            chunk.topic = self._classify_chunk(chunk.text, chunk_type)
             
             # Create evidence object if confidence is sufficient
             evidence = self._create_evidence(chunk, document_id, metadata)
@@ -324,16 +251,41 @@ class SemanticProcessor:
         logger.info(f"Extracted {len(evidence_list)} evidence items from document {document_id}")
         return evidence_list
     
-    def _create_semantic_chunks(self, text: str) -> List[SemanticChunk]:
-        """
-        Split text into semantically meaningful chunks.
+    def process_document_chunks(self, doc_dir: Path) -> Dict[str, List[Evidence]]:
+        """Process individual document chunks instead of full.md."""
+        chunk_files = [
+            'risk_management.md', 'governance.md', 'schedule.md',
+            'cost_management.md', 'commercial_management.md',
+            'approvals_envelope.md', 'execution_strategy.md',
+            'benefits_management.md', 'stakeholder_management.md'
+        ]
         
-        Args:
-            text: Input text to chunk
-            
-        Returns:
-            List of SemanticChunk objects
-        """
+        all_evidence = {}
+        doc_name = doc_dir.name
+        
+        for chunk_file in chunk_files:
+            chunk_path = doc_dir / chunk_file
+            if chunk_path.exists():
+                chunk_type = chunk_file.replace('.md', '')
+                logger.info(f"Processing chunk: {chunk_type} from {doc_name}")
+                
+                with open(chunk_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                
+                evidence = self.process_document(
+                    content,
+                    doc_name,
+                    metadata={
+                        'chunk_type': chunk_type,
+                        'source_path': str(chunk_path)
+                    }
+                )
+                all_evidence[chunk_type] = evidence
+        
+        return all_evidence
+    
+    def _create_semantic_chunks(self, text: str, chunk_type: Optional[str] = None) -> List[SemanticChunk]:
+        """Split text into semantically meaningful chunks."""
         chunks = []
         doc = self.nlp(text)
         
@@ -357,7 +309,8 @@ class SemanticProcessor:
                         end_index=current_chunk[-1].end_char,
                         embedding=None,
                         topic=None,
-                        entities=[]
+                        entities=[],
+                        chunk_type=chunk_type
                     ))
                 
                 # Start new chunk with overlap
@@ -378,7 +331,8 @@ class SemanticProcessor:
                 end_index=current_chunk[-1].end_char,
                 embedding=None,
                 topic=None,
-                entities=[]
+                entities=[],
+                chunk_type=chunk_type
             ))
         
         return chunks
@@ -416,16 +370,17 @@ class SemanticProcessor:
         """Extract MOD-specific entities like DLOD, KUR references, etc."""
         mod_entities = []
         
-        # Define patterns for MOD-specific terms
+        # Enhanced patterns for MOD-specific terms
         patterns = {
             'DLOD': r'\b(DLOD|Delegated Lines? of Development)\b',
             'KUR': r'\b(KUR|Key User Requirements?)\s*\d*\b',
-            'PHASE': r'\b(Assessment Phase|AP|Demonstration Phase|Manufacture Phase)\b',
-            'COMMITTEE': r'\b(PSEC|CIAWG|IAC|JROC)\b',
-            'DOCUMENT': r'\b(PMP|FBC|OBC|IGBC|SEMP)\b'
+            'PHASE': r'\b(Assessment Phase|AP|Demonstration Phase|Manufacture Phase|Initial Gate|Main Gate)\b',
+            'COMMITTEE': r'\b(PSEC|CIAWG|IAC|JROC|Investment Approvals Committee)\b',
+            'DOCUMENT': r'\b(PMP|FBC|OBC|IGBC|SEMP|ILSP|SSMP|SRD)\b',
+            'STANDARD': r'\b(JSP\s*\d+|GovS\s*\d+|DCMA-14|ISO\s*\d+)\b',
+            'MILESTONE': r'\b(IOC|FOC|ISD|Contract Award|CDR|PDR|TRR)\b'
         }
         
-        import re
         for entity_type, pattern in patterns.items():
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for match in matches:
@@ -434,342 +389,159 @@ class SemanticProcessor:
                     type=f'MOD_{entity_type}',
                     start_pos=match.start(),
                     end_pos=match.end(),
-                    confidence=0.95  # High confidence for pattern matches
+                    confidence=0.95
                 ))
         
         return mod_entities
     
-    def _classify_chunk(self, text: str) -> Optional[str]:
+    def _classify_chunk(self, text: str, chunk_type: Optional[str] = None) -> Optional[str]:
         """Classify text chunk into PEAT categories."""
-        categories = list(self.peat_categories.keys())
+        # If chunk type is provided, use predefined mappings
+        if chunk_type and chunk_type in self.chunk_type_to_category:
+            primary_categories = self.chunk_type_to_category[chunk_type]
+            
+            # Still run classification but boost scores for expected categories
+            categories = list(self.peat_categories.keys())
+            result = self.classifier(
+                text,
+                candidate_labels=categories,
+                multi_label=True
+            )
+            
+            # Boost scores for expected categories
+            boosted_scores = []
+            for label, score in zip(result['labels'], result['scores']):
+                if label in primary_categories:
+                    boosted_scores.append(min(score * 1.2, 1.0))  # 20% boost
+                else:
+                    boosted_scores.append(score)
+            
+            # Return top category
+            max_idx = boosted_scores.index(max(boosted_scores))
+            if boosted_scores[max_idx] >= self.config['min_confidence_threshold']:
+                return result['labels'][max_idx]
+        else:
+            # Standard classification without boost
+            categories = list(self.peat_categories.keys())
+            result = self.classifier(
+                text,
+                candidate_labels=categories,
+                multi_label=True
+            )
+            
+            if result['scores'][0] >= self.config['min_confidence_threshold']:
+                return result['labels'][0]
         
-        result = self.classifier(
-            text,
-            candidate_labels=categories,
-            multi_label=True
-        )
-        
-        # Return top category if confidence is high enough
-        if result['scores'][0] >= self.config['min_confidence_threshold']:
-            return result['labels'][0]
         return None
     
     def _create_evidence(self, chunk: SemanticChunk, document_id: str,
                         metadata: Optional[Dict[str, Any]] = None) -> Optional[Evidence]:
         """Create an Evidence object from a semantic chunk."""
-        if not chunk.topic:
+        # Calculate relevance score based on entities and classification
+        relevance_score = self._calculate_relevance_score(chunk)
+        
+        if relevance_score < 0.5:
             return None
         
-        # Calculate confidence based on multiple factors
-        confidence = self._calculate_evidence_confidence(chunk)
+        # Determine PEAT categories
+        peat_categories = []
+        if chunk.topic:
+            peat_categories.append(chunk.topic)
         
-        # Determine relevant PEAT categories
-        peat_categories = self._map_to_peat_categories(chunk)
+        # Add categories based on chunk type
+        if chunk.chunk_type and chunk.chunk_type in self.chunk_type_to_category:
+            peat_categories.extend(self.chunk_type_to_category[chunk.chunk_type])
+        
+        # Remove duplicates
+        peat_categories = list(set(peat_categories))
         
         return Evidence(
             content=chunk.text,
             document_id=document_id,
-            page_number=metadata.get('page_number') if metadata else None,
+            chunk_type=chunk.chunk_type,
+            page_number=None,
             entities=chunk.entities,
             embedding=chunk.embedding,
             peat_categories=peat_categories,
-            confidence_score=confidence,
+            confidence_score=relevance_score,
             metadata=metadata or {}
         )
     
-    def _calculate_evidence_confidence(self, chunk: SemanticChunk) -> float:
-        """
-        Calculate confidence score for evidence based on multiple factors.
+    def _calculate_relevance_score(self, chunk: SemanticChunk) -> float:
+        """Calculate relevance score for a chunk."""
+        score = 0.0
         
-        Factors considered:
-        - Entity density and relevance
-        - Topic classification confidence  
-        - Presence of key terms with weights
-        - Document structure indicators
-        """
-        scores = []
+        # Base score from classification confidence
+        if chunk.topic:
+            score += 0.5
         
-        # Entity density score
-        entity_score = min(len(chunk.entities) / 10.0, 1.0)  # Normalize to 0-1
-        scores.append(entity_score * 0.25)  # 25% weight
-        
-        # MOD-specific entity presence
+        # Boost for MOD-specific entities
         mod_entities = [e for e in chunk.entities if e.type.startswith('MOD_')]
-        mod_score = min(len(mod_entities) / 5.0, 1.0)
-        scores.append(mod_score * 0.35)  # 35% weight
+        if mod_entities:
+            score += min(len(mod_entities) * 0.1, 0.3)
         
-        # Weighted key term presence
-        weighted_term_score = self._calculate_weighted_term_score(chunk.text)
-        scores.append(weighted_term_score * 0.4)  # 40% weight
+        # Boost for other relevant entities
+        other_entities = [e for e in chunk.entities if not e.type.startswith('MOD_')]
+        if other_entities:
+            score += min(len(other_entities) * 0.05, 0.2)
         
-        return sum(scores)
+        # Boost for chunk type alignment
+        if chunk.chunk_type:
+            score += 0.1
+        
+        return min(score, 1.0)
     
-    def _calculate_weighted_term_score(self, text: str) -> float:
-        """Calculate weighted score based on presence of key terms."""
-        total_weight = 0.0
-        max_possible_weight = 0.0
+    def find_similar_evidence(self, evidence: Evidence, 
+                            evidence_list: List[Evidence],
+                            threshold: float = None) -> List[Tuple[Evidence, float]]:
+        """Find similar evidence based on embeddings."""
+        threshold = threshold or self.config['similarity_threshold']
+        similar_evidence = []
         
-        text_lower = text.lower()
+        if evidence.embedding is None:
+            return similar_evidence
         
-        # Check all categories for weighted keywords
-        for category, keywords in self.peat_categories.items():
-            category_weights = self.category_weights.get(category, {})
+        for other in evidence_list:
+            if other.id == evidence.id or other.embedding is None:
+                continue
             
-            for keyword in keywords:
-                weight = category_weights.get(keyword, 1.0)
-                max_possible_weight += weight
-                
-                if keyword.lower() in text_lower:
-                    total_weight += weight
+            similarity = cosine_similarity(
+                evidence.embedding.reshape(1, -1),
+                other.embedding.reshape(1, -1)
+            )[0, 0]
+            
+            if similarity >= threshold:
+                similar_evidence.append((other, similarity))
         
-        # Normalize to 0-1 range
-        if max_possible_weight > 0:
-            return min(total_weight / (max_possible_weight * 0.1), 1.0)  # Scale factor
-        return 0.0
+        # Sort by similarity score
+        similar_evidence.sort(key=lambda x: x[1], reverse=True)
+        return similar_evidence
     
-    def _map_to_peat_categories(self, chunk: SemanticChunk) -> List[str]:
-        """Map chunk to relevant PEAT categories based on content with weighted keywords."""
-        categories = []
+    def cluster_evidence(self, evidence_list: List[Evidence], n_clusters: int = 5) -> Dict[int, List[Evidence]]:
+        """Cluster evidence based on semantic similarity."""
+        # Extract embeddings
+        embeddings = []
+        valid_evidence = []
         
-        # Use embedding similarity to find relevant categories
-        chunk_embedding = chunk.embedding.reshape(1, -1)
-        
-        for category, keywords in self.peat_categories.items():
-            # Get weights for this category
-            category_weights = self.category_weights.get(category, {})
-            
-            # Calculate weighted score for keywords found in chunk
-            keyword_score = 0.0
-            keywords_found = 0
-            
-            for keyword in keywords:
-                if keyword.lower() in chunk.text.lower():
-                    # Get weight for this keyword (default 1.0 if not specified)
-                    weight = category_weights.get(keyword, 1.0)
-                    keyword_score += weight
-                    keywords_found += 1
-            
-            # Normalize keyword score
-            if keywords_found > 0:
-                keyword_score = keyword_score / len(keywords)
-            
-            # Create weighted embedding for category keywords
-            weighted_keyword_texts = []
-            for keyword in keywords:
-                weight = category_weights.get(keyword, 1.0)
-                # Repeat keyword based on weight (rounded to int)
-                weighted_keyword_texts.extend([keyword] * int(weight))
-            
-            category_text = ' '.join(weighted_keyword_texts)
-            category_embedding = self._generate_embedding(category_text).reshape(1, -1)
-            
-            # Calculate similarity
-            similarity = cosine_similarity(chunk_embedding, category_embedding)[0][0]
-            
-            # Combine similarity score with keyword score
-            final_score = (similarity * 0.7) + (keyword_score * 0.3)
-            
-            if final_score >= 0.6:  # Threshold for category relevance
-                categories.append(category)
-        
-        return categories
-    
-    def find_evidence_for_peat_question(self, question: str, 
-                                      evidence_list: List[Evidence]) -> List[Tuple[Evidence, float]]:
-        """
-        Find relevant evidence for a specific PEAT question.
-        
-        Args:
-            question: PEAT question text
-            evidence_list: List of available evidence
-            
-        Returns:
-            List of tuples (Evidence, relevance_score) sorted by relevance
-        """
-        question_embedding = self._generate_embedding(question).reshape(1, -1)
-        
-        scored_evidence = []
         for evidence in evidence_list:
             if evidence.embedding is not None:
-                evidence_embedding = evidence.embedding.reshape(1, -1)
-                similarity = cosine_similarity(question_embedding, evidence_embedding)[0][0]
-                
-                # Boost score if entities are relevant
-                entity_boost = self._calculate_entity_relevance_boost(question, evidence.entities)
-                final_score = similarity + (entity_boost * 0.2)
-                
-                scored_evidence.append((evidence, final_score))
+                embeddings.append(evidence.embedding)
+                valid_evidence.append(evidence)
         
-        # Sort by relevance score
-        scored_evidence.sort(key=lambda x: x[1], reverse=True)
+        if len(embeddings) < n_clusters:
+            logger.warning(f"Not enough evidence for {n_clusters} clusters")
+            n_clusters = max(1, len(embeddings) // 2)
         
-        return scored_evidence
-    
-    def _calculate_entity_relevance_boost(self, question: str, entities: List[Entity]) -> float:
-        """Calculate relevance boost based on entity matches with question."""
-        question_lower = question.lower()
-        relevant_entities = 0
+        # Perform clustering
+        embeddings_matrix = np.array(embeddings)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        clusters = kmeans.fit_predict(embeddings_matrix)
         
-        for entity in entities:
-            if entity.text.lower() in question_lower:
-                relevant_entities += 1
+        # Group evidence by cluster
+        cluster_dict = {}
+        for idx, cluster_id in enumerate(clusters):
+            if cluster_id not in cluster_dict:
+                cluster_dict[cluster_id] = []
+            cluster_dict[cluster_id].append(valid_evidence[idx])
         
-        return min(relevant_entities / 3.0, 1.0)  # Normalize to 0-1
-    
-    def generate_evidence_summary(self, evidence_list: List[Evidence]) -> Dict[str, Any]:
-        """
-        Generate a summary of extracted evidence by category.
-        
-        Args:
-            evidence_list: List of evidence objects
-            
-        Returns:
-            Summary dictionary with statistics and categorization
-        """
-        summary = {
-            'total_evidence': len(evidence_list),
-            'by_category': {},
-            'confidence_distribution': {
-                'high': 0,    # > 0.8
-                'medium': 0,  # 0.6 - 0.8
-                'low': 0      # < 0.6
-            },
-            'entity_types': {},
-            'documents_covered': set()
-        }
-        
-        for evidence in evidence_list:
-            # Category distribution
-            for category in evidence.peat_categories:
-                summary['by_category'][category] = summary['by_category'].get(category, 0) + 1
-            
-            # Confidence distribution
-            if evidence.confidence_score > 0.8:
-                summary['confidence_distribution']['high'] += 1
-            elif evidence.confidence_score >= 0.6:
-                summary['confidence_distribution']['medium'] += 1
-            else:
-                summary['confidence_distribution']['low'] += 1
-            
-            # Entity type distribution
-            for entity in evidence.entities:
-                entity_type = entity.type
-                summary['entity_types'][entity_type] = summary['entity_types'].get(entity_type, 0) + 1
-            
-            # Documents covered
-            summary['documents_covered'].add(evidence.document_id)
-        
-        summary['documents_covered'] = list(summary['documents_covered'])
-        
-        return summary
-    
-    def export_evidence_for_knowledge_graph(self, evidence_list: List[Evidence]) -> List[Dict[str, Any]]:
-        """
-        Export evidence in format suitable for knowledge graph creation.
-        
-        Args:
-            evidence_list: List of evidence objects
-            
-        Returns:
-            List of dictionaries formatted for Neo4j import
-        """
-        graph_data = []
-        
-        for evidence in evidence_list:
-            # Create evidence node data
-            evidence_node = {
-                'type': 'Evidence',
-                'properties': {
-                    'id': f"{evidence.document_id}_{hash(evidence.content)[:8]}",
-                    'content': evidence.content,
-                    'confidence_score': evidence.confidence_score,
-                    'categories': evidence.peat_categories,
-                    'document_id': evidence.document_id,
-                    'page_number': evidence.page_number,
-                    'timestamp': datetime.now().isoformat()
-                }
-            }
-            graph_data.append(evidence_node)
-            
-            # Create entity nodes and relationships
-            for entity in evidence.entities:
-                entity_node = {
-                    'type': 'Entity',
-                    'properties': {
-                        'id': f"entity_{hash(entity.text + entity.type)[:8]}",
-                        'text': entity.text,
-                        'entity_type': entity.type,
-                        'confidence': entity.confidence
-                    }
-                }
-                graph_data.append(entity_node)
-                
-                # Create relationship
-                relationship = {
-                    'type': 'MENTIONS',
-                    'from': evidence_node['properties']['id'],
-                    'to': entity_node['properties']['id'],
-                    'properties': {
-                        'position': f"{entity.start_pos}-{entity.end_pos}"
-                    }
-                }
-                graph_data.append(relationship)
-        
-        return graph_data
-    
-    def save_configurations(self, categories_output: Optional[str] = None,
-                          weights_output: Optional[str] = None):
-        """
-        Save current configurations to JSON files.
-        
-        Args:
-            categories_output: Output path for categories (default: uses init path)
-            weights_output: Output path for weights (default: uses init path)
-        """
-        # Save categories
-        if categories_output or self.categories_file:
-            output_path = categories_output or self.categories_file
-            with open(output_path, 'w') as f:
-                json.dump(self.peat_categories, f, indent=2)
-            logger.info(f"Saved categories to {output_path}")
-        
-        # Save weights
-        if weights_output or self.weights_file:
-            output_path = weights_output or self.weights_file
-            with open(output_path, 'w') as f:
-                json.dump(self.category_weights, f, indent=2)
-            logger.info(f"Saved weights to {output_path}")
-    
-    def add_category_keywords(self, category: str, keywords: List[str], 
-                            weights: Optional[Dict[str, float]] = None):
-        """
-        Add keywords to a category with optional weights.
-        
-        Args:
-            category: Category name
-            keywords: List of keywords to add
-            weights: Optional dictionary of keyword weights
-        """
-        if category not in self.peat_categories:
-            self.peat_categories[category] = []
-        
-        # Add keywords
-        for keyword in keywords:
-            if keyword not in self.peat_categories[category]:
-                self.peat_categories[category].append(keyword)
-        
-        # Add weights
-        if weights:
-            if category not in self.category_weights:
-                self.category_weights[category] = {}
-            self.category_weights[category].update(weights)
-        
-        logger.info(f"Added {len(keywords)} keywords to category '{category}'")
-    
-    def update_keyword_weight(self, category: str, keyword: str, weight: float):
-        """Update the weight for a specific keyword in a category."""
-        if category not in self.category_weights:
-            self.category_weights[category] = {}
-        
-        self.category_weights[category][keyword] = weight
-        logger.info(f"Updated weight for '{keyword}' in '{category}' to {weight}")
+        return cluster_dict
