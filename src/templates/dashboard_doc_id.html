@@ -533,16 +533,13 @@
                     <div class="evidence-list" id="evidence-list">
                         {% for ev in stats.evidence %}
                         {% set conf = ev.confidence %}
-                        {% set conf_class = 'high-confidence' if conf >= 0.8 else ('medium-confidence' if conf >= 0.6
-                        else 'low-confidence') %}
+                        {% set conf_class = 'high-confidence' if conf >= 0.8 else ('medium-confidence' if conf >= 0.6 else 'low-confidence') %}
                         {% set badge_class = '' if conf >= 0.8 else ('medium' if conf >= 0.6 else 'low') %}
                         <div class="evidence-item {{ conf_class }}">
-                            <div class="evidence-content">{{ ev.content[:200] }}{% if ev.content|length > 200 %}...{%
-                                endif %}</div>
+                            <div class="evidence-content">{{ ev.content[:200] }}{% if ev.content|length > 200 %}...{% endif %}</div>
                             <div class="evidence-meta">
                                 <span>Chunk: {{ ev.chunk_type }}</span>
-                                <span class="confidence-badge {{ badge_class }}">{{ (ev.confidence * 100)|round(0) }}%
-                                    confidence</span>
+                                <span class="confidence-badge {{ badge_class }}">{{ (ev.confidence * 100)|round(0) }}% confidence</span>
                             </div>
                             <div class="category-tags">
                                 {% for cat in ev.categories %}
