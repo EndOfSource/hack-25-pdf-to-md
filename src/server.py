@@ -39,6 +39,88 @@ def get_documents():
     return [node for node in data["nodes"] if node["type"] == "Document"]
 
 
+def getStatsForDocument(doc_id):
+    with open("llm_integration_export.json", "r") as f:
+        data = json.load(f)
+    doc = data["documents"].get(doc_id)
+
+    if not doc:
+        # Try without "doc_" prefix
+        doc_id_without_prefix = doc_id.replace("doc_", "")
+        doc = data["documents"].get(doc_id_without_prefix)
+        if not doc:
+            return None
+
+    # Gather evidence
+    evidence = []
+    for ev in doc.get("evidence", []):
+        evidence.append(
+            {
+                "content": ev.get("content", ""),
+                "categories": ev.get("categories", []),
+                "confidence": ev.get("confidence", 0),
+                "chunk_type": ev.get("chunk_type", ""),
+            }
+        )
+
+    # Calculate strengths, gaps, recommendations (simple heuristics for now)
+    strengths = []
+    gaps = []
+    recommendations = []
+
+    # Example: strengths if evidence exists for a category
+    categories = set()
+    for ev in evidence:
+        categories.update(ev["categories"])
+    if "risk_management" in categories:
+        strengths.append("Strong evidence in risk management procedures")
+    if "governance" in categories:
+        strengths.append("Governance structure evidence present")
+    if "financial_management" in categories:
+        strengths.append("Financial management evidence present")
+    if "logistics_support" in categories:
+        strengths.append("Logistics support evidence present")
+
+    # Example: gaps if missing expected categories
+    expected = {
+        "risk_management",
+        "governance",
+        "financial_management",
+        "logistics_support",
+    }
+    missing = expected - categories
+    for cat in missing:
+        gaps.append(f"Missing {cat.replace('_', ' ')} evidence")
+
+    # Example: recommendations based on gaps
+    for gap in gaps:
+        recommendations.append(f"Add comprehensive {gap[8:]} section")
+
+    # Graph position (dummy for now)
+    graph_position = {
+        "centrality": 0.5,
+        "connections": 1,
+        "role": "Document",
+    }
+
+    # Calculate average confidence
+    avg_conf = (
+        sum(ev["confidence"] for ev in evidence) / len(evidence) if evidence else 0
+    )
+
+    return {
+        "label": doc.get("label", doc_id),
+        "evidence": evidence,
+        "strengths": strengths,
+        "gaps": gaps,
+        "recommendations": recommendations,
+        "graph_position": graph_position,
+        "avg_confidence": avg_conf,
+        "categories_covered": len(categories),
+        "evidence_count": len(evidence),
+    }
+
+
 @app.route("/ask", methods=["GET"])
 def serveAsk():
     return render_template("ask.html", documents=get_documents())
@@ -73,6 +155,24 @@ def ask():
         doc_id=doc_id,
         documents=get_documents(),
         question=question,
+    )
+
+
+@app.route("/dashboards", methods=["GET"])
+def dashboardGet():
+    return render_template("dashboard.html", documents=get_documents())
+
+
+@app.route("/dashboard/<id>", methods=["GET"])
+def dashboardGetId(id):
+    print(f"Dashboard request for document ID: {id}")
+    documentForId = [doc for doc in get_documents() if doc["id"] == id][0]
+    print(f"Found document for ID {id}: {documentForId}")
+    return render_template(
+        "dashboard_doc_id.html",
+        doc_id=id,
+        document=documentForId,
+        stats=getStatsForDocument(id),
     )
 
 
