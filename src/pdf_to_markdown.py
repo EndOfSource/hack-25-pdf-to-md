@@ -64,7 +64,12 @@ def pdf_to_markdown(filename: Path):
             f.write(f"**{heading}**\n\n{content}\n")
 
 
-if __name__ == "__main__":
-    source_dir = os.path.expanduser("pdfs/")
+def process_all_pdfs(source_dir):
+    source_dir = os.path.expanduser("documents/")
     for pdf_file in Path(source_dir).glob("*.pdf"):
         pdf_to_markdown(pdf_file)
+
+
+if __name__ == "__main__":
+    process_all_pdfs("documents/")
+    print("All PDFs processed and converted to markdown.")

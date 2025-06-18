@@ -6,6 +6,7 @@ if __name__ == "__main__":
     from modules.peat_knowledge_graph import PEATKnowledgeGraph
     from src.import_knowledge_graph import import_knowledge_graph
     from src.server import runServer
+    from src.pdf_to_markdown import pdf_to_markdown
 
     import json
     import numpy as np
@@ -22,6 +23,10 @@ if __name__ == "__main__":
             elif isinstance(obj, np.ndarray):
                 return obj.tolist()
             return super(NumpyEncoder, self).default(obj)
+
+    print(f"❓ Did you run docker compose up?")
+
+    pdf_to_markdown("documents/")
 
     complete_semantic_config = {
         "embedding_model": "all-MiniLM-L6-v2",
