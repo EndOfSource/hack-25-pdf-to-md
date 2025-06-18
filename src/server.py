@@ -211,8 +211,17 @@ def dashboardPostId(id):
 
 @app.route("/dashboards-compare", methods=["GET"])
 def dashboardCompare():
+    documents = get_documents()
+    stats_map = {doc["id"]: getStatsForDocument(doc["id"]) for doc in documents}
+    doc_id_1 = documents[0]["id"]
+    doc_id_2 = documents[1]["id"]
+
     return render_template(
         "compare.html",
+        documents=documents,
+        stats_map=stats_map,
+        doc_id_1=doc_id_1,
+        doc_id_2=doc_id_2,
     )
 
 
