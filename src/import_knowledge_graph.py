@@ -60,10 +60,11 @@ def import_knowledge_graph(json_path, neo4j_uri, user, password):
     driver.close()
 
 
-# Example usage:
-import_knowledge_graph(
-    "/home/dirk/code/hack25/knowledge_graph.json",
-    "bolt://localhost:7687",
-    "neo4j",
-    "hack25gg",
-)
+if __name__ == "__main__":
+    # Example usage:
+    import_knowledge_graph(
+        "/home/dirk/code/hack25/knowledge_graph.json",
+        "bolt://localhost:7687",
+        "neo4j",
+        "hack25gg",
+    )

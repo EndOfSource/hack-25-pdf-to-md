@@ -239,5 +239,9 @@ def dashboardComparePost():
     )
 
 
-if __name__ == "__main__":
+def runServer():
     app.run(debug=True, port=5000)
+
+
+if __name__ == "__main__":
+    runServer()
