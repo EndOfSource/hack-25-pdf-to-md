@@ -47,7 +47,8 @@ def serveAsk():
 @app.route("/ask", methods=["POST"])
 def ask():
     doc_id = request.form.get("doc_id", "")
-    print(f"Processing document ID: {doc_id}")
+    question = request.form.get("question", "")
+    print(f"Processing document ID: {doc_id}, question: {question}")
     if not doc_id:
         return render_template("index.html", output="Error: No document ID provided")
     doc_type = "Document"
@@ -62,16 +63,16 @@ def ask():
     records = query_neo4j(cypher, neo4j_uri, user, password)
     context = "\n".join(str(r) for r in records)
 
-    prompt = """You are a schedule assurance specialist reviewing this Project Management Plan (PMP) for compliance with DCMA-14 scheduling principles and GovS 002 project governance. Based on this, please assess the following:  
-    Does the PMP attached describe how the project schedule is built, including logic links between tasks and milestone relationships?  
-    Are baseline schedules or performance tracking methods defined (e.g., earned value, critical path analysis)? 
-    Is there evidence of governance-level monitoring of schedule risk, including escalation or recovery plans? 
-    Provide evidence from the PMP and offer suggestions to improve compliance with DCMA-14 and GovS 002 expectations. 
-    Search the Neo4j database for relevant information to support your assessment."""
+    prompt = f"{question}\n\nSearch the Neo4j database for relevant information to support your assessment."
+    print(f"prompt: {prompt}    ")
     output = ask_ollama(prompt, context)
 
     return render_template(
-        "ask.html", output=output, doc_id=doc_id, documents=get_documents()
+        "ask.html",
+        output=output,
+        doc_id=doc_id,
+        documents=get_documents(),
+        question=question,
     )
 
 

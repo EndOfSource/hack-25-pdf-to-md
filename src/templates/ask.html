@@ -10,7 +10,7 @@
 </head>
 
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white shadow-lg rounded-lg p-8 w-full max-w-md">
+    <div class="bg-white shadow-lg rounded-lg p-8 w-full mx-4">
         <h2 class="text-2xl font-bold mb-6 text-gray-800 text-center">ask a file</h2>
         <form action="/ask" enctype="multipart/form-data" method="post" class="flex flex-col gap-4">
             <select name="doc_id"
@@ -20,11 +20,14 @@
                 </option>
                 {% endfor %}
             </select>
+            <textarea name="question" rows="4" cols="50"
+                class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 resize-none"
+                placeholder="Type your question here...">{{ question }}</textarea>
             <input type="submit" value="ask"
                 class="bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition-colors cursor-pointer" />
         </form>
         <h3 class="text-lg font-semibold mt-8 mb-2 text-gray-700">Output:</h3>
-        <textarea rows="4" cols="50"
+        <textarea rows="10" cols="50"
             class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-50 resize-none"
             readonly>{{ output }}</textarea>
     </div>
