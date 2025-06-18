@@ -465,8 +465,10 @@
 <body>
     <div class="container">
         <div class="header">
-            <img src="{{ url_for('static', filename='verifica_logo.png') }}" alt="Verifica Logo"
-                style="height: 60px; margin-bottom: 10px;">
+            <a href="/dashboards" style="text-decoration: none; color: inherit;">
+                <img src="{{ url_for('static', filename='verifica_logo.png') }}" alt="Verifica Logo"
+                    style="height: 60px; margin-bottom: 10px;">
+            </a>
             <p>Analyze individual documents and their position within the knowledge graph</p>
         </div>
 
@@ -474,6 +476,7 @@
         <div id="document-analysis" class="tab-content active">
             <div class="card">
                 <h3>📄 Document: <span id="current-doc-title">{{ stats.label if stats else doc_id }}</span></h3>
+                <a href="/dashboards-compare">Compare dashboard</a>
                 <div id="document-details">
                     {% if not stats %}
                     <p style="color: #6c757d;">No analysis available for this document.</p>
