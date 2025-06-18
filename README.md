@@ -76,6 +76,10 @@ langchain>=0.0.200  # For LLM integration
 openai>=0.27.0  # For OpenAI integration
 ```
 
+### Setup Ollama
+
+https://ollama.com/download
+
 ### Setup
 
 ```bash
