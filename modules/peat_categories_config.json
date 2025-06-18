@@ -1,0 +1,105 @@
+{
+  "governance": [
+    "project board", "steering committee", "governance structure",
+    "decision making", "accountability", "RACI matrix", "terms of reference",
+    "investment approval committee", "IAC", "project control", "PC",
+    "senior responsible owner", "SRO", "project director", "PD",
+    "project manager", "PM", "PSEC", "project safety environmental committee",
+    "CIAWG", "capability integration acceptance working group",
+    "authority", "delegation", "oversight", "assurance", "scrutiny",
+    "approval gates", "review board", "programme board", "portfolio board",
+    "escalation", "reporting structure", "command structure", "TOR","RAM","responsiblity assingment matrix"
+  ],
+  "requirements": [
+    "KUR", "key user requirements", "functional requirements",
+    "non-functional requirements", "specifications", "acceptance criteria",
+    "user requirements document", "URD", "system requirements", "SRD",
+    "KPP", "key performance parameters", "measures of effectiveness",
+    "threshold", "objective", "requirement justification", "requirement ID",
+    "operational requirements", "technical requirements", "interface requirements",
+    "performance requirements", "JROC", "joint requirements oversight committee",
+    "requirement validation", "requirement verification", "requirement traceability","SRD","system requirements document"
+  ],
+  "risk_management": [
+    "risk register", "risk assessment", "mitigation", "contingency",
+    "risk appetite", "risk matrix", "probability", "impact",
+    "risk owner", "risk category", "technical risk", "schedule risk",
+    "cost risk", "operational risk", "safety risk", "environmental risk",
+    "HAZARD log", "hazard analysis", "safety case", "SEMP",
+    "safety environmental management plan", "risk reduction", "risk acceptance",
+    "residual risk", "risk treatment", "risk monitoring", "risk review"
+  ],
+  "stakeholder_management": [
+    "stakeholder register", "stakeholder analysis", "engagement plan",
+    "communication plan", "RACI", "power interest grid", "stakeholder matrix",
+    "front line command", "FLC", "user community", "delivery partner",
+    "industry partner", "supplier engagement", "customer engagement",
+    "stakeholder communication", "consultation", "information requirements",
+    "stakeholder categories", "influence", "interest", "engagement strategy",
+    "communication frequency", "reporting requirements", "stakeholder review"
+  ],
+  "benefits_management": [
+    "benefits realization", "benefits register", "benefits tracking",
+    "value proposition", "outcomes", "KPIs", "success criteria",
+    "operational benefits", "capability benefits", "efficiency gains",
+    "cost avoidance", "benefit owner", "benefit profile", "dis-benefits",
+    "benefit dependencies", "benefit measurement", "benefit baseline",
+    "FOC", "full operating capability", "IOC", "initial operating capability",
+    "capability delivery", "force elements at readiness", "operational advantage"
+  ],
+  "resources": [
+    "resource plan", "staffing", "budget", "funding", "allocation",
+    "capacity planning", "skills matrix", "SQEP", "suitably qualified experienced personnel",
+    "manpower", "FTE", "full time equivalent", "contractor resources",
+    "cost estimate", "ABC", "annual budget cycle", "financial authority",
+    "cost cap", "cost baseline", "resource profile", "team structure",
+    "organization chart", "organogram", "roles and responsibilities",
+    "commercial resources", "technical resources", "project support"
+  ],
+  "schedule": [
+    "project plan", "timeline", "milestones", "critical path",
+    "Gantt chart", "dependencies", "deadlines", "programme plan",
+    "integrated master schedule", "IMS", "key milestones", "decision points",
+    "IGBC", "initial gate business case", "OBC", "outline business case",
+    "FBC", "full business case", "assessment phase", "demonstration phase",
+    "manufacture phase", "in-service phase", "disposal phase",
+    "PASE", "planned acceptance service entry", "schedule baseline",
+    "schedule risk", "float", "schedule compression", "parallel activities"
+  ],
+  "quality": [
+    "quality plan", "quality assurance", "quality control",
+    "standards", "testing", "validation", "verification",
+    "PQMP", "project quality management plan", "quality metrics",
+    "quality reviews", "technical reviews", "design reviews",
+    "GEAR", "guide engineering activities reviews", "acceptance testing",
+    "qualification testing", "certification", "compliance", "audit",
+    "defect management", "quality gates", "inspection", "MOD standards",
+    "defence standards", "JSP", "joint service publication",
+    "configuration management", "baseline control", "change control"
+  ],
+  "technical_management": [
+    "technical authority", "design authority", "system architecture",
+    "technical baseline", "interface management", "integration plan",
+    "technical risk", "technology readiness level", "TRL", "design maturity",
+    "COTS", "commercial off the shelf", "MOTS", "military off the shelf",
+    "obsolescence management", "configuration control", "technical documentation",
+    "engineering management plan", "system design", "subsystem design"
+  ],
+  "commercial_management": [
+    "procurement strategy", "contract management", "supplier management",
+    "competitive procurement phase", "CPP", "ITN", "invitation to negotiate",
+    "BAFO", "best and final offer", "MEAT", "most economically advantageous tender",
+    "framework agreement", "FATS", "framework agreement technical support",
+    "commercial baseline", "contract deliverables", "payment milestones",
+    "intellectual property rights", "IPR", "terms and conditions",
+    "supply chain", "subcontractor management", "commercial risk"
+  ],
+  "logistics_support": [
+    "integrated logistics support", "ILS", "ILSP", "integrated logistics support plan",
+    "support solution", "maintenance concept", "spares provisioning",
+    "training requirements", "technical documentation", "support equipment",
+    "DLOD", "delegated lines of development", "equipment DLOD", "training DLOD",
+    "infrastructure DLOD", "personnel DLOD", "information DLOD", "doctrine DLOD",
+    "organization DLOD", "through life support", "availability requirements"
+  ]
+}

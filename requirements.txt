@@ -3,3 +3,14 @@ pandas
 pyneoinstance
 flask
 requests
+numpy>=1.21.0
+scikit-learn>=1.0.0
+sentence-transformers>=2.2.0
+transformers>=4.25.0
+torch>=1.13.0
+spacy>=3.4.0
+networkx>=2.8
+plotly>=5.11.0
+neo4j>=5.0.0  # Optional for Neo4j support
+langchain>=0.0.200  # For LLM integration
+openai>=0.27.0  # For OpenAI integration
