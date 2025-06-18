@@ -36,7 +36,11 @@ def upload_file():
 def get_documents():
     with open("knowledge_graph.json", "r") as f:
         data = json.load(f)
-    return [node for node in data["nodes"] if node["type"] == "Document"]
+    return [
+        node
+        for node in data["nodes"]
+        if node.get("path", "").startswith("documents_processed/")
+    ]
 
 
 def getStatsForDocument(doc_id):
@@ -160,7 +164,11 @@ def ask():
 
 @app.route("/dashboards", methods=["GET"])
 def dashboardGet():
-    return render_template("dashboard.html", documents=get_documents())
+    documents = get_documents()
+    stats_map = {doc["id"]: getStatsForDocument(doc["id"]) for doc in documents}
+    return render_template(
+        "dashboard.html", documents=get_documents(), stats_map=stats_map
+    )
 
 
 @app.route("/dashboard/<id>", methods=["GET"])

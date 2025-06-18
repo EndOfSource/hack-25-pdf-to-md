@@ -27,12 +27,28 @@
         }
 
         .header {
+            display: flex;
+            align-items: center;
+            gap: 24px;
             background: rgba(255, 255, 255, 0.95);
             padding: 25px;
             border-radius: 15px;
             margin-bottom: 30px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(10px);
+        }
+
+        .header img {
+            height: 60px;
+            margin-bottom: 0;
+        }
+
+        .header h1 {
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            margin: 0;
         }
 
         .nav-tabs {
@@ -448,7 +464,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 PEAT Document Assessment System</h1>
+            <img src="{{ url_for('static', filename='verifica_logo.png') }}" alt="Verifica Logo"
+                style="height: 60px; margin-bottom: 10px;">
             <p>Analyze individual documents and their position within the knowledge graph</p>
         </div>
 
@@ -458,27 +475,45 @@
 
             <div class="document-selector">
                 {% for doc in documents %}
+                {% set stats = stats_map[doc.id] %}
                 <div class="document-card" onclick="selectDocument('{{ doc.id }}')">
-                    <div class="document-title">{{ doc.name }}</div>
-                    <!-- <p style="color: #6c757d; margin-bottom: 10px;">Risk Management Project Plan</p>
+                    <p style="color: #6c757d; margin-bottom: 10px;">
+                        {{ stats.label if stats else "No label" }}
+                    </p>
                     <div class="document-stats">
                         <div class="stat-item">
-                            <div class="stat-number">4</div>
+                            <div class="stat-number">
+                                {{ stats.evidence_count if stats else "—" }}
+                            </div>
                             <div class="stat-label">Evidence Items</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">75%</div>
+                            <div class="stat-number">
+                                {% if stats %}
+                                {{ (stats.avg_confidence * 100)|round(0) }}%
+                                {% else %}
+                                —
+                                {% endif %}
+                            </div>
                             <div class="stat-label">Avg Confidence</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">3</div>
+                            <div class="stat-number">
+                                {{ stats.categories_covered if stats else "—" }}
+                            </div>
                             <div class="stat-label">Categories</div>
                         </div>
                         <div class="stat-item">
-                            <div class="stat-number">65%</div>
+                            <div class="stat-number">
+                                {% if stats %}
+                                {{ (stats.avg_confidence * 100)|round(0) }}%
+                                {% else %}
+                                —
+                                {% endif %}
+                            </div>
                             <div class="stat-label">PEAT Score</div>
                         </div>
-                    </div> -->
+                    </div>
                 </div>
                 {% endfor %}
             </div>

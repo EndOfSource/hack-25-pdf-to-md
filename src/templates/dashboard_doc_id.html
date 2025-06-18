@@ -27,6 +27,9 @@
         }
 
         .header {
+            display: flex;
+            align-items: center;
+            gap: 24px;
             background: rgba(255, 255, 255, 0.95);
             padding: 25px;
             border-radius: 15px;
@@ -34,6 +37,20 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(10px);
         }
+
+        .header img {
+            height: 60px;
+            margin-bottom: 0;
+        }
+
+        .header h1 {
+            margin-bottom: 8px;
+        }
+
+        .header p {
+            margin: 0;
+        }
+
 
         .nav-tabs {
             display: flex;
@@ -448,20 +465,24 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎯 PEAT Document Assessment System</h1>
+            <img src="{{ url_for('static', filename='verifica_logo.png') }}" alt="Verifica Logo"
+                style="height: 60px; margin-bottom: 10px;">
             <p>Analyze individual documents and their position within the knowledge graph</p>
         </div>
 
         <!-- Document Analysis Tab -->
         <div id="document-analysis" class="tab-content active">
             <div class="card">
-                <h3>📄 Document: <span id="current-doc-title">Select a document from Overview</span></h3>
+                <h3>📄 Document: <span id="current-doc-title">{{ stats.label if stats else doc_id }}</span></h3>
                 <div id="document-details">
-                    <p style="color: #6c757d;">Select a document from the Overview tab to see detailed analysis.</p>
+                    {% if not stats %}
+                    <p style="color: #6c757d;">No analysis available for this document.</p>
+                    {% endif %}
                 </div>
             </div>
 
-            <div class="assessment-grid" id="assessment-grid" style="display: none;">
+            {% if stats %}
+            <div class="assessment-grid" id="assessment-grid" style="display: grid;">
                 <!-- Overall Score -->
                 <div class="assessment-section">
                     <div class="section-title">📊 Overall Assessment</div>
@@ -470,10 +491,12 @@
                             <svg width="120" height="120">
                                 <circle class="bg" cx="60" cy="60" r="52"></circle>
                                 <circle class="progress" cx="60" cy="60" r="52" id="score-circle" stroke-dasharray="327"
-                                    stroke-dashoffset="327"></circle>
+                                    stroke-dashoffset="{{ 327 - ((stats.avg_confidence * 100)|int) / 100 * 327 }}">
+                                </circle>
                             </svg>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);">
-                                <div class="score-number" id="overall-score">65%</div>
+                                <div class="score-number" id="overall-score">{{ (stats.avg_confidence * 100)|round(0)
+                                    }}%</div>
                             </div>
                         </div>
                         <div class="score-label">PEAT Compliance Score</div>
@@ -481,19 +504,21 @@
 
                     <div class="metric-grid">
                         <div class="metric-card">
-                            <div class="metric-value" id="evidence-count">4</div>
+                            <div class="metric-value" id="evidence-count">{{ stats.evidence_count }}</div>
                             <div class="metric-title">Evidence Items</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-value" id="categories-covered">3</div>
+                            <div class="metric-value" id="categories-covered">{{ stats.categories_covered }}</div>
                             <div class="metric-title">Categories</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-value" id="avg-confidence">75%</div>
+                            <div class="metric-value" id="avg-confidence">{{ (stats.avg_confidence * 100)|round(0) }}%
+                            </div>
                             <div class="metric-title">Avg Confidence</div>
                         </div>
                         <div class="metric-card">
-                            <div class="metric-value" id="graph-connections">2</div>
+                            <div class="metric-value" id="graph-connections">{{ stats.graph_position.connections }}
+                            </div>
                             <div class="metric-title">Connections</div>
                         </div>
                     </div>
@@ -503,7 +528,26 @@
                 <div class="assessment-section">
                     <div class="section-title">🔍 Evidence Analysis</div>
                     <div class="evidence-list" id="evidence-list">
-                        <!-- Evidence items will be populated here -->
+                        {% for ev in stats.evidence %}
+                        {% set conf = ev.confidence %}
+                        {% set conf_class = 'high-confidence' if conf >= 0.8 else ('medium-confidence' if conf >= 0.6
+                        else 'low-confidence') %}
+                        {% set badge_class = '' if conf >= 0.8 else ('medium' if conf >= 0.6 else 'low') %}
+                        <div class="evidence-item {{ conf_class }}">
+                            <div class="evidence-content">{{ ev.content[:200] }}{% if ev.content|length > 200 %}...{%
+                                endif %}</div>
+                            <div class="evidence-meta">
+                                <span>Chunk: {{ ev.chunk_type }}</span>
+                                <span class="confidence-badge {{ badge_class }}">{{ (ev.confidence * 100)|round(0) }}%
+                                    confidence</span>
+                            </div>
+                            <div class="category-tags">
+                                {% for cat in ev.categories %}
+                                <span class="category-tag">{{ cat.replace('_', ' ') }}</span>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
 
@@ -511,14 +555,18 @@
                 <div class="assessment-section">
                     <div class="section-title">✅ Strengths</div>
                     <ul class="recommendation-list" id="strengths-list">
-                        <!-- Strengths will be populated here -->
+                        {% for s in stats.strengths %}
+                        <li>{{ s }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
 
                 <div class="assessment-section">
                     <div class="section-title">⚠️ Gaps Identified</div>
                     <ul class="gap-list" id="gaps-list">
-                        <!-- Gaps will be populated here -->
+                        {% for g in stats.gaps %}
+                        <li>{{ g }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
 
@@ -526,568 +574,32 @@
                 <div class="assessment-section" style="grid-column: 1 / -1;">
                     <div class="section-title">💡 Recommendations</div>
                     <ul class="recommendation-list" id="recommendations-list">
-                        <!-- Recommendations will be populated here -->
+                        {% for r in stats.recommendations %}
+                        <li>{{ r }}</li>
+                        {% endfor %}
                     </ul>
                 </div>
             </div>
+            {% endif %}
         </div>
-
     </div>
     <div class="tooltip" id="tooltip"></div>
 
+    <!-- Remove all JS that references mockDocuments, selectDocument, loadDocumentAnalysis, etc. -->
     <script>
-        // Mock data for demonstration
-        const mockDocuments = {
-            'doc_20250605-Anonymised_PMP_2_FINAL': {
-                label: '20250605-Anonymised_PMP_2_FINAL',
-                evidence: [
-                    {
-                        content: 'Risk management procedure can be found via the SYSTEM link. The RACI matrix shows who holds responsibility for risk management within the project.',
-                        categories: ['risk_management', 'safety_security'],
-                        confidence: 0.8,
-                        chunk_type: 'risk_management'
-                    },
-                    {
-                        content: 'The Risk Manager conducts a monthly drumbeat review of each risk in the programme risk register with the respective risk owners.',
-                        categories: ['risk_management'],
-                        confidence: 0.9,
-                        chunk_type: 'risk_management'
-                    },
-                    {
-                        content: 'Risk ownership is delegated to the best person to manage. Generally, the CAMs are the owners of the risks.',
-                        categories: ['risk_management'],
-                        confidence: 0.75,
-                        chunk_type: 'risk_management'
-                    },
-                    {
-                        content: 'Governance structure documentation placeholder.',
-                        categories: ['governance'],
-                        confidence: 0.6,
-                        chunk_type: 'governance'
-                    }
-                ],
-                strengths: [
-                    'Strong evidence in risk management procedures',
-                    'Clear responsibility allocation through RACI matrix',
-                    'Regular risk review processes documented'
-                ],
-                gaps: [
-                    'Limited governance structure documentation',
-                    'Missing financial management evidence',
-                    'Schedule methodology not defined'
-                ],
-                recommendations: [
-                    'Enhance governance documentation with clear structures and decision-making processes',
-                    'Add comprehensive financial management section',
-                    'Define schedule methodology with logic links and milestones',
-                    'Strengthen evidence quality with more specific examples'
-                ],
-                graph_position: {
-                    centrality: 0.65,
-                    connections: 2,
-                    role: 'Hub Document - Well connected to other documents'
-                }
-            },
-            '20250611-Anonymised_PMP_7_FINAL': {
-                label: '20250611-Anonymised_PMP_7_FINAL',
-                evidence: [
-                    {
-                        content: 'The project will operate within the following confirmed approvals. CAPABILITY ORGANISATION is held to account for the milestones agreed in all of its CASP Annexes.',
-                        categories: ['governance', 'stakeholder_management'],
-                        confidence: 0.85,
-                        chunk_type: 'approvals_envelope'
-                    },
-                    {
-                        content: 'The project has a total budget approval of £XXXXm at 50% confidence level to complete the delivery of the Design and Manufacture phase.',
-                        categories: ['financial_management'],
-                        confidence: 0.9,
-                        chunk_type: 'approvals_envelope'
-                    },
-                    {
-                        content: 'FOC will occur when the full capability set is available, tested and assured; sufficient logistic support, trained personnel and infrastructure exist.',
-                        categories: ['logistics_support', 'stakeholder_management'],
-                        confidence: 0.95,
-                        chunk_type: 'approvals_envelope'
-                    }
-                ],
-                strengths: [
-                    'Clear budget approval documentation',
-                    'Well-defined capability delivery milestones',
-                    'Strong logistics support planning'
-                ],
-                gaps: [
-                    'Risk management procedures not detailed',
-                    'Schedule methodology missing',
-                    'Quality management processes undefined'
-                ],
-                recommendations: [
-                    'Add detailed risk management section',
-                    'Define comprehensive schedule methodology',
-                    'Include quality assurance processes',
-                    'Enhance stakeholder engagement documentation'
-                ],
-                graph_position: {
-                    centrality: 0.45,
-                    connections: 1,
-                    role: 'Supporting Document - Provides specific approval context'
-                }
-            }
-        };
-
-        let currentDocument = null;
-        let currentGraphView = 'network';
-
-        function showTab(tabName) {
-            // Hide all tab contents
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-
-            // Remove active class from all buttons
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
-
-            // Show selected tab content
-            document.getElementById(tabName).classList.add('active');
-
-            // Add active class to clicked button
-            // event.target.classList.add('active');
-
-            // Initialize tab-specific content
-            if (tabName === 'graph-view' && currentDocument) {
-                initializeGraphVisualization();
-            }
-        }
-
-        function selectDocument(documentId) {
-            currentDocument = documentId;
-
-            // Update document card selection
-            document.querySelectorAll('.document-card').forEach(card => {
-                card.classList.remove('selected');
-            });
-            // event.currentTarget.classList.add('selected');
-
-            // Switch to document analysis tab
-            showTab('document-analysis');
-            // document.querySelector('.tab-button[onclick="showTab(\'document-analysis\')"]').classList.add('active');
-            // document.querySelector('.tab-button[onclick="showTab(\'overview\')"]').classList.remove('active');
-
-            // Load document details
-            loadDocumentAnalysis(documentId);
-        }
-
-        function loadDocumentAnalysis(documentId) {
-            const doc = mockDocuments[documentId];
-            if (!doc) return;
-
-            // Update document title
-            document.getElementById('current-doc-title').textContent = doc.label;
-            document.getElementById('assessment-grid').style.display = 'grid';
-
-            // Calculate overall score
-            const avgConfidence = doc.evidence.reduce((sum, e) => sum + e.confidence, 0) / doc.evidence.length;
-            const categoryCount = new Set(doc.evidence.flatMap(e => e.categories)).size;
-            const overallScore = Math.round((avgConfidence * 0.7 + (categoryCount / 8) * 0.3) * 100);
-
-            // Update overall score display
-            document.getElementById('overall-score').textContent = overallScore + '%';
-            updateProgressRing(overallScore);
-
-            // Update metrics
-            document.getElementById('evidence-count').textContent = doc.evidence.length;
-            document.getElementById('categories-covered').textContent = categoryCount;
-            document.getElementById('avg-confidence').textContent = Math.round(avgConfidence * 100) + '%';
-            document.getElementById('graph-connections').textContent = doc.graph_position.connections;
-
-            // Update evidence list
-            updateEvidenceList(doc.evidence);
-
-            // Update strengths, gaps, and recommendations
-            updateStrengthsGapsRecommendations(doc.strengths, doc.gaps, doc.recommendations);
-        }
-
-        function updateProgressRing(percentage) {
-            const circle = document.getElementById('score-circle');
-            const circumference = 2 * Math.PI * 52; // 52 is the radius
-            const offset = circumference - (percentage / 100) * circumference;
-            circle.style.strokeDashoffset = offset;
-
-            // Change color based on score
-            if (percentage >= 80) {
-                circle.style.stroke = '#28a745';
-            } else if (percentage >= 60) {
-                circle.style.stroke = '#ffc107';
-            } else {
-                circle.style.stroke = '#dc3545';
-            }
-        }
-
-        function updateEvidenceList(evidence) {
-            const container = document.getElementById('evidence-list');
-            container.innerHTML = '';
-
-            evidence.forEach((item, index) => {
-                const confidenceClass = item.confidence >= 0.8 ? 'high-confidence' :
-                    item.confidence >= 0.6 ? 'medium-confidence' : 'low-confidence';
-
-                const confidenceBadgeClass = item.confidence >= 0.8 ? '' :
-                    item.confidence >= 0.6 ? 'medium' : 'low';
-
-                const evidenceElement = document.createElement('div');
-                evidenceElement.className = `evidence-item ${confidenceClass}`;
-                evidenceElement.innerHTML = `
-                    <div class="evidence-content">${item.content.substring(0, 200)}${item.content.length > 200 ? '...' : ''}</div>
-                    <div class="evidence-meta">
-                        <span>Chunk: ${item.chunk_type}</span>
-                        <span class="confidence-badge ${confidenceBadgeClass}">${Math.round(item.confidence * 100)}% confidence</span>
-                    </div>
-                    <div class="category-tags">
-                        ${item.categories.map(cat => `<span class="category-tag">${cat.replace('_', ' ')}</span>`).join('')}
-                    </div>
-                `;
-                container.appendChild(evidenceElement);
-            });
-        }
-
-        function updateStrengthsGapsRecommendations(strengths, gaps, recommendations) {
-            // Update strengths
-            const strengthsList = document.getElementById('strengths-list');
-            strengthsList.innerHTML = '';
-            strengths.forEach(strength => {
-                const li = document.createElement('li');
-                li.textContent = strength;
-                strengthsList.appendChild(li);
-            });
-
-            // Update gaps
-            const gapsList = document.getElementById('gaps-list');
-            gapsList.innerHTML = '';
-            gaps.forEach(gap => {
-                const li = document.createElement('li');
-                li.textContent = gap;
-                gapsList.appendChild(li);
-            });
-
-            // Update recommendations
-            const recommendationsList = document.getElementById('recommendations-list');
-            recommendationsList.innerHTML = '';
-            recommendations.forEach(recommendation => {
-                const li = document.createElement('li');
-                li.textContent = recommendation;
-                recommendationsList.appendChild(li);
-            });
-        }
-
-        function showGraphView(viewType) {
-            currentGraphView = viewType;
-
-            // Update button states
-            document.querySelectorAll('.control-button').forEach(btn => {
-                btn.style.background = '#667eea';
-            });
-            // event.target.style.background = '#5a6fd8';
-
-            initializeGraphVisualization();
-        }
-
-        function initializeGraphVisualization() {
-            const container = document.getElementById('graph-container');
-            container.innerHTML = '';
-
-            if (!currentDocument) {
-                container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6c757d;">Select a document to view its knowledge graph position</div>';
-                return;
-            }
-
-            if (currentGraphView === 'network') {
-                createNetworkVisualization(container);
-            } else if (currentGraphView === 'hierarchy') {
-                createHierarchyVisualization(container);
-            } else if (currentGraphView === 'categories') {
-                createCategoryVisualization(container);
-            }
-        }
-
-        function createNetworkVisualization(container) {
-            const width = container.clientWidth;
-            const height = container.clientHeight - 50;
-
-            const svg = d3.select(container)
-                .append('svg')
-                .attr('width', width)
-                .attr('height', height);
-
-            // Mock network data
-            const nodes = [
-                { id: '20250605-Anonymised_PMP_2_FINAL', type: 'document', selected: currentDocument === '20250605-Anonymised_PMP_2_FINAL' },
-                { id: '20250611-Anonymised_PMP_7_FINAL', type: 'document', selected: currentDocument === '20250611-Anonymised_PMP_7_FINAL' },
-                { id: 'Risk Management', type: 'category' },
-                { id: 'Governance', type: 'category' },
-                { id: 'Financial Management', type: 'category' },
-                { id: 'Logistics Support', type: 'category' }
-            ];
-
-            const links = [
-                { source: '20250605-Anonymised_PMP_2_FINAL', target: 'Risk Management', strength: 0.9 },
-                { source: '20250605-Anonymised_PMP_2_FINAL', target: 'Governance', strength: 0.4 },
-                { source: '20250611-Anonymised_PMP_7_FINAL', target: 'Governance', strength: 0.8 },
-                { source: '20250611-Anonymised_PMP_7_FINAL', target: 'Financial Management', strength: 0.9 },
-                { source: '20250611-Anonymised_PMP_7_FINAL', target: 'Logistics Support', strength: 0.85 },
-                { source: '20250605-Anonymised_PMP_2_FINAL', target: '20250611-Anonymised_PMP_7_FINAL', strength: 0.65 }
-            ];
-
-            const simulation = d3.forceSimulation(nodes)
-                .force('link', d3.forceLink(links).id(d => d.id).distance(100))
-                .force('charge', d3.forceManyBody().strength(-300))
-                .force('center', d3.forceCenter(width / 2, height / 2));
-
-            const link = svg.append('g')
-                .selectAll('line')
-                .data(links)
-                .enter().append('line')
-                .attr('class', 'network-link')
-                .attr('stroke-width', d => Math.sqrt(d.strength * 5));
-
-            const node = svg.append('g')
-                .selectAll('circle')
-                .data(nodes)
-                .enter().append('circle')
-                .attr('class', 'network-node')
-                .attr('r', d => d.type === 'document' ? 15 : 10)
-                .attr('fill', d => {
-                    if (d.selected) return '#ff6b6b';
-                    return d.type === 'document' ? '#667eea' : '#28a745';
-                })
-                .attr('stroke', d => d.selected ? '#ff4757' : '#fff')
-                .attr('stroke-width', d => d.selected ? 3 : 2)
-                .on('mouseover', function (event, d) {
-                    showTooltip(event, d);
-                })
-                .on('mouseout', hideTooltip)
-                .call(d3.drag()
-                    .on('start', dragstarted)
-                    .on('drag', dragged)
-                    .on('end', dragended));
-
-            const label = svg.append('g')
-                .selectAll('text')
-                .data(nodes)
-                .enter().append('text')
-                .attr('class', 'node-label')
-                .text(d => d.id.length > 20 ? d.id.substring(0, 20) + '...' : d.id)
-                .attr('dy', 25);
-
-            simulation.on('tick', () => {
-                link
-                    .attr('x1', d => d.source.x)
-                    .attr('y1', d => d.source.y)
-                    .attr('x2', d => d.target.x)
-                    .attr('y2', d => d.target.y);
-
-                node
-                    .attr('cx', d => d.x)
-                    .attr('cy', d => d.y);
-
-                label
-                    .attr('x', d => d.x)
-                    .attr('y', d => d.y);
-            });
-
-            function dragstarted(event, d) {
-                if (!event.active) simulation.alphaTarget(0.3).restart();
-                d.fx = d.x;
-                d.fy = d.y;
-            }
-
-            function dragged(event, d) {
-                d.fx = event.x;
-                d.fy = event.y;
-            }
-
-            function dragended(event, d) {
-                if (!event.active) simulation.alphaTarget(0);
-                d.fx = null;
-                d.fy = null;
-            }
-        }
-
-        function createHierarchyVisualization(container) {
-            container.innerHTML = `
-                <div style="padding: 20px;">
-                    <h4 style="margin-bottom: 20px;">Document Hierarchy View</h4>
-                    <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                        <div style="width: 20px; height: 20px; background: #667eea; border-radius: 50%; margin-right: 10px;"></div>
-                        <span style="font-weight: 600;">${currentDocument}</span>
-                        <span style="margin-left: 10px; color: #6c757d;">(Focus Document)</span>
-                    </div>
-                    <div style="margin-left: 30px;">
-                        <div style="margin-bottom: 10px; color: #28a745;">📂 Evidence Categories:</div>
-                        <div style="margin-left: 20px;">
-                            ${Object.keys(mockDocuments[currentDocument] || {}).length > 0 ?
-                    (mockDocuments[currentDocument].evidence || [])
-                        .flatMap(e => e.categories)
-                        .filter((cat, index, arr) => arr.indexOf(cat) === index)
-                        .map(cat => `<div style="margin: 5px 0;">• ${cat.replace('_', ' ')}</div>`)
-                        .join('') : 'No categories found'}
-                        </div>
-                    </div>
-                    <div style="margin-left: 30px; margin-top: 20px;">
-                        <div style="margin-bottom: 10px; color: #ffc107;">🔗 Connected Documents:</div>
-                        <div style="margin-left: 20px;">
-                            ${Object.keys(mockDocuments).filter(id => id !== currentDocument)
-                    .map(id => `<div style="margin: 5px 0;">• ${id} (Similarity: 65%)</div>`)
-                    .join('')}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function createCategoryVisualization(container) {
-            const doc = mockDocuments[currentDocument];
-            if (!doc) return;
-
-            const categories = doc.evidence.flatMap(e => e.categories)
-                .reduce((acc, cat) => {
-                    acc[cat] = (acc[cat] || 0) + 1;
-                    return acc;
-                }, {});
-
-            container.innerHTML = `
-                <div style="padding: 20px;">
-                    <h4 style="margin-bottom: 20px;">Evidence Distribution by Category</h4>
-                    ${Object.entries(categories).map(([category, count]) => `
-                        <div style="margin-bottom: 15px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                                <span style="font-weight: 600;">${category.replace('_', ' ')}</span>
-                                <span style="color: #6c757d;">${count} evidence items</span>
-                            </div>
-                            <div style="background: #e9ecef; border-radius: 10px; height: 8px;">
-                                <div style="background: #667eea; height: 8px; border-radius: 10px; width: ${(count / Math.max(...Object.values(categories))) * 100}%;"></div>
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
-        }
-
-        function compareDocuments() {
-            const doc1Id = document.getElementById('doc1-select').value;
-            const doc2Id = document.getElementById('doc2-select').value;
-
-            if (!doc1Id || !doc2Id) {
-                alert('Please select both documents to compare');
-                return;
-            }
-
-            if (doc1Id === doc2Id) {
-                alert('Please select different documents to compare');
-                return;
-            }
-
-            const doc1 = mockDocuments[doc1Id];
-            const doc2 = mockDocuments[doc2Id];
-
-            const resultsContainer = document.getElementById('comparison-results');
-            resultsContainer.style.display = 'block';
-
-            // Calculate similarity metrics
-            const doc1Categories = new Set(doc1.evidence.flatMap(e => e.categories));
-            const doc2Categories = new Set(doc2.evidence.flatMap(e => e.categories));
-            const sharedCategories = new Set([...doc1Categories].filter(x => doc2Categories.has(x)));
-            const allCategories = new Set([...doc1Categories, ...doc2Categories]);
-
-            const similarityScore = (sharedCategories.size / allCategories.size * 100).toFixed(1);
-
-            resultsContainer.innerHTML = `
-                <div class="assessment-grid">
-                    <div class="assessment-section">
-                        <div class="section-title">📊 Comparison Overview</div>
-                        <div class="metric-grid">
-                            <div class="metric-card">
-                                <div class="metric-value">${similarityScore}%</div>
-                                <div class="metric-title">Similarity Score</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-value">${sharedCategories.size}</div>
-                                <div class="metric-title">Shared Categories</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-value">${doc1.evidence.length} vs ${doc2.evidence.length}</div>
-                                <div class="metric-title">Evidence Count</div>
-                            </div>
-                            <div class="metric-card">
-                                <div class="metric-value">${Math.round((doc1.evidence.reduce((sum, e) => sum + e.confidence, 0) / doc1.evidence.length) * 100)}% vs ${Math.round((doc2.evidence.reduce((sum, e) => sum + e.confidence, 0) / doc2.evidence.length) * 100)}%</div>
-                                <div class="metric-title">Avg Confidence</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="assessment-section">
-                        <div class="section-title">📂 Category Comparison</div>
-                        <div style="margin-bottom: 15px;">
-                            <strong>Shared Categories (${sharedCategories.size}):</strong>
-                            <div style="margin-top: 8px;">
-                                ${[...sharedCategories].map(cat => `<span class="category-tag" style="margin: 2px;">${cat.replace('_', ' ')}</span>`).join('')}
-                            </div>
-                        </div>
-                        <div style="margin-bottom: 15px;">
-                            <strong>Only in ${doc1Id.split('_')[0]}:</strong>
-                            <div style="margin-top: 8px;">
-                                ${[...doc1Categories].filter(cat => !doc2Categories.has(cat)).map(cat => `<span class="category-tag" style="margin: 2px; background: #dc3545;">${cat.replace('_', ' ')}</span>`).join('') || '<em>None</em>'}
-                            </div>
-                        </div>
-                        <div>
-                            <strong>Only in ${doc2Id.split('_')[0]}:</strong>
-                            <div style="margin-top: 8px;">
-                                ${[...doc2Categories].filter(cat => !doc1Categories.has(cat)).map(cat => `<span class="category-tag" style="margin: 2px; background: #28a745;">${cat.replace('_', ' ')}</span>`).join('') || '<em>None</em>'}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function showTooltip(event, data) {
-            const tooltip = document.getElementById('tooltip');
-            let content = '';
-
-            if (data.type === 'document') {
-                const doc = mockDocuments[data.id];
-                content = `
-                    <strong>${data.id}</strong><br>
-                    Evidence: ${doc ? doc.evidence.length : 'N/A'}<br>
-                    Categories: ${doc ? new Set(doc.evidence.flatMap(e => e.categories)).size : 'N/A'}<br>
-                    ${data.selected ? '<em>Currently Selected</em>' : 'Click to select'}
-                `;
-            } else {
-                content = `
-                    <strong>${data.id}</strong><br>
-                    Type: Evidence Category<br>
-                    Connected documents: ${Object.keys(mockDocuments).filter(docId =>
-                    mockDocuments[docId].evidence.some(e => e.categories.includes(data.id))
-                ).length}
-                `;
-            }
-
-            tooltip.innerHTML = content;
-            tooltip.style.left = (event.pageX + 10) + 'px';
-            tooltip.style.top = (event.pageY - 10) + 'px';
-            tooltip.style.opacity = 1;
-        }
-
-        function hideTooltip() {
-            document.getElementById('tooltip').style.opacity = 0;
-        }
-
-        // Initialize with first document selected
+        // Only keep the progress ring color logic for the compliance score
         document.addEventListener('DOMContentLoaded', function () {
-            // Auto-select first document after a short delay for demonstration
-            setTimeout(() => {
-                selectDocument('{{ doc_id }}');
-            }, 1000);
+            var circle = document.getElementById('score-circle');
+            if (circle) {
+                var percent = parseInt(document.getElementById('overall-score').textContent, 10);
+                if (percent >= 80) {
+                    circle.style.stroke = '#28a745';
+                } else if (percent >= 60) {
+                    circle.style.stroke = '#ffc107';
+                } else {
+                    circle.style.stroke = '#dc3545';
+                }
+            }
         });
     </script>
 </body>

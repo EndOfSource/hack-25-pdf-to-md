@@ -29,7 +29,7 @@ def import_knowledge_graph(json_path, neo4j_uri, user, password):
     with driver.session() as session:
         # Create nodes
         node_ids = {}
-        for node in enumerate(nodes):
+        for idx, node in enumerate(nodes):
             node_name = node.get("name", node["id"])
             result = session.run(
                 "CREATE (n:Node {name: $name, elementId: $elementId, type: $type}) RETURN id(n)",
@@ -41,7 +41,7 @@ def import_knowledge_graph(json_path, neo4j_uri, user, password):
             node_ids[node["id"]] = node_id
 
         # Create edges
-        for edge in enumerate(edges):
+        for idx, edge in enumerate(edges):
             # Find source and target node indices
             # Assume edges are between consecutive nodes (i to i+1)
             src_id = node_ids.get(edge["source"])
